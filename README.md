@@ -51,6 +51,23 @@ This issue has generated much discussion:
 * https://groups.google.com/forum/#!topic/akka-user/U-UAadh50mM
 * https://groups.google.com/forum/#!topic/akka-user/AdRSv2yuwo4
 
+## Design
+A _sacrifical_ ActorSystem is used within each node:
+1. Determines cluster membership
+2. Proxies messages between nodes
+3. Restarts as needed to allow nodes to re-joining
+
+A proxy design (much like [Cluster Client](http://doc.akka.io/docs/akka/snapshot/contrib/cluster-client.html))
+minimizes the impact of the ActorSystem restart and decouples the membership service from the real functionality. 
+
+A restart is required:
+* This node becomes a singleton
+* The server in the other instance is downed
+
+
+
+
+
 
 
 
