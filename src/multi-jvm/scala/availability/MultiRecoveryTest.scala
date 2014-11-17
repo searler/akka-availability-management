@@ -5,17 +5,17 @@ import akka.remote.testkit.MultiNodeSpec
 import akka.testkit.ImplicitSender
 import org.scalatest.{ BeforeAndAfterAll, WordSpecLike }
 import org.scalatest.Matchers
-import akka.actor.Actor
-import akka.actor.Props
-import akka.actor.ActorSystem
+import akka.actor._
 import com.typesafe.config.ConfigFactory
 import Recovery.EmbeddedDown
 import Recovery.NullEmbeddedState
 import akka.cluster.Member
-import akka.cluster.ClusterEvent.MemberUp
+import akka.cluster.ClusterEvent._
 import Recovery._
 import Redirector._
 import scala.concurrent.duration._
+import akka.remote.transport.ThrottlerTransportAdapter.Direction
+
 
 object RecoveryMultiNodeConfig extends MultiNodeConfig {
   val controller = role("controller")
@@ -40,8 +40,6 @@ object RecoveryMultiNodeConfig extends MultiNodeConfig {
 
   nodeConfig(client1)(
     ConfigFactory.parseString("akka.cluster.roles =[ws,ws1]"))
-
-  testTransport(on = true)
 }
 
 class MultiNodeRecoverySpecMultiJvmNode1 extends MultiRecoveryTest
@@ -55,6 +53,8 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
   import RecoveryMultiNodeConfig._
 
   def initialParticipants = roles.size
+  
+  var m:ActorRef = _
 
   def start(roles: String, portIndex: Int) = {
     val seedAddress = node(server1).address.toString
@@ -72,10 +72,10 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
                 "akka.tcp://ClusterSystem@golem:1234"
                ]
                roles=["$roles"]
-              auto-down-unreachable-after = 3s
+              auto-down-unreachable-after = 1s
             }
             """)
-    system.actorOf(Recovery.props(() => ActorSystem("ClusterSystem", config),
+    m = system.actorOf(Recovery.props(() => ActorSystem("ClusterSystem", config),
       _.actorOf(Redirector.props()),
       (_: Set[Member], m: Member) => m.hasRole("srv")))
   }
@@ -85,41 +85,54 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
     "wait for all nodes to enter a barrier" in {
       enterBarrier("startup")
     }
-
-    "send to and receive from a remote node" in {
+    
+    "deploy" in {
       runOn(controller) {
         enterBarrier("deployed")
       }
       runOn(server1) {
-        val m = start("srv1", 0)
+         start("srv1", 0)
         m ! Register(self)
         enterBarrier("deployed")
-
-        expectMsg(4 seconds, "hello")
       }
 
       runOn(server2) {
-        val m = start("srv2", 1)
+         start("srv2", 1)
         m ! Register(self)
         enterBarrier("deployed")
-        expectMsg(4 seconds, "there")
       }
 
       runOn(client1) {
-        val m = start("ws1", 2)
+        start("ws1", 2)
         m ! Register(self)
-        enterBarrier("deployed")
         m ! RegisterClusterListener(self)
         List("srv1", "srv2").foreach {
           role => expectMsgPF(4 seconds) { case MemberUp(p) if p.hasRole(`role`) => () }
         }
+         enterBarrier("deployed")
+      }
+    }
 
+    "redirect" in {
+      runOn(server1) {
+        expectMsg(4 seconds, "hello")
+      }
+
+      runOn(server2) {
+        expectMsg(4 seconds, "there")
+      }
+
+      runOn(client1) {
         m ! Send("srv1", "testActor1", "hello")
         m ! Send("srv2", "testActor1", "there")
       }
 
-      enterBarrier("finished")
+      enterBarrier("redirected")
     }
+    
+   
+    
+    
   }
 
   override def beforeAll() = multiNodeSpecBeforeAll()
