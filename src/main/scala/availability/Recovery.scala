@@ -17,6 +17,8 @@ import scala.util.Try
 import com.typesafe.config.ConfigException
 
 object Recovery {
+  
+  case class RegisterClusterListener(listener:ActorRef)
 
   case object EmbeddedDown
   trait EmbeddedState
@@ -34,7 +36,7 @@ object Recovery {
 
   private sealed trait Data
   private case class RestartState(state: EmbeddedState) extends Data
-  private case class RunState(system: ActorSystem, embedded: ActorRef, members: Set[Member]) extends Data
+  private case class RunState(system: ActorSystem, cluster:Cluster, embedded: ActorRef, members: Set[Member]) extends Data
 
   private class RecoveryActor(systemBuilder: () => ActorSystem,
     embeddedBuilder: (ActorSystem) => ActorRef,
@@ -44,6 +46,10 @@ object Recovery {
     startWith(Running, start(RestartState(NullEmbeddedState)))
 
     when(Running) {
+      case Event(RegisterClusterListener(listener), state: RunState) =>
+        state.cluster.subscribe(listener, initialStateMode = InitialStateAsEvents,
+        classOf[MemberEvent])
+        stay
       case Event(MemberRemoved(member, _), state: RunState) =>
         (state.members - member) match {
           case members if members.size == 1 |
@@ -76,7 +82,7 @@ object Recovery {
     }
 
     onTermination {
-      case StopEvent(_, _, RunState(system, _, _)) => system.shutdown
+      case StopEvent(_, _, RunState(system, _, _,_)) => system.shutdown
     }
 
     initialize
@@ -89,7 +95,7 @@ object Recovery {
         classOf[MemberEvent])
       val embedded = embeddedBuilder(system)
       embedded ! state.state
-      RunState(system, embedded, Set())
+      RunState(system, cluster, embedded, Set())
     }
 
     private def timeout(state: RunState) = Try(

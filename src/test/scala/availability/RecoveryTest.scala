@@ -3,11 +3,9 @@ package availability
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.Matchers
 import org.scalatest.WordSpecLike
-
 import com.typesafe.config.ConfigFactory
-
-import Recovery.EmbeddedDown
-import Recovery.NullEmbeddedState
+import Recovery._
+import Redirector.Register
 import akka.actor.Actor
 import akka.actor.ActorSystem
 import akka.actor.Props
@@ -15,6 +13,7 @@ import akka.actor.actorRef2Scala
 import akka.cluster.Member
 import akka.testkit.ImplicitSender
 import akka.testkit.TestKit
+import akka.cluster.ClusterEvent.MemberRemoved
 
 class RecoveryTest(_system: ActorSystem) extends TestKit(_system) with ImplicitSender
   with WordSpecLike with Matchers with BeforeAndAfterAll {
@@ -23,7 +22,7 @@ class RecoveryTest(_system: ActorSystem) extends TestKit(_system) with ImplicitS
             akka.actor.provider = "akka.cluster.ClusterActorRefProvider"
             akka.remote {
               netty.tcp {
-                hostname = "localhost"
+                hostname = "golem"
                 port = 1234 
               }
             }
@@ -56,6 +55,7 @@ class RecoveryTest(_system: ActorSystem) extends TestKit(_system) with ImplicitS
       val manager = system.actorOf(Recovery.props(() => ActorSystem("name",config),
         _.actorOf(Props(new Simple())),
         (_: Set[Member], m: Member) => m.hasRole("two")))
+        
     }
 
   }
