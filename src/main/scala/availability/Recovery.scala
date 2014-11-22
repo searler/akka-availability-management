@@ -16,18 +16,51 @@ import java.util.concurrent.TimeUnit
 import scala.util.Try
 import com.typesafe.config.ConfigException
 
+/**
+ * Manage sacrificial cluster and embedded actor instance
+ * 
+ * Recreate cluster when connectivity to all or specific nodes is lost.
+ * 
+ * The 'recovery.timeout' configuration parameter specifies how long to wait
+ * for the embedded actor to respond with its current state. Defaults to 1 second.
+ *
+ */
 object Recovery {
-  
-  case class RegisterClusterListener(listener:ActorRef)
 
+  /**
+   * Registers cluster state listener via the RecoveryActor
+   *
+   * @param listener receives MemberEvent from the sacrificial ActorSystem
+   */
+  case class RegisterClusterListener(listener: ActorRef)
+
+  /**
+   * Sent to embedded actor to request that it reply with
+   * its current state and terminate
+   */
   case object EmbeddedDown
+
+  /**
+   * Trait from which all state of the embedded actor that must survive restart
+   * derives
+   */
   trait EmbeddedState
+  /**
+   * Embedded actor has no state that needs to survive restart
+   */
   case object NullEmbeddedState extends EmbeddedState
 
+  /**
+   * @param systemBuilder create the sacrificial ActorSystem
+   * @param embeddedBuilder create the Actor contained within the ActorSystem
+   * @param restart (previously connected nodes,downed node) determine if ActorSystem must be restarted
+   */
   def props(systemBuilder: () => ActorSystem,
     embeddedBuilder: (ActorSystem) => ActorRef,
     restart: (Set[Member], Member) => Boolean) =
     Props(classOf[RecoveryActor], systemBuilder, embeddedBuilder, restart)
+
+  //---------------- internal ----------------------  
 
   private sealed trait State
   private case object Running extends State
@@ -36,7 +69,7 @@ object Recovery {
 
   private sealed trait Data
   private case class RestartState(state: EmbeddedState) extends Data
-  private case class RunState(system: ActorSystem, cluster:Cluster, embedded: ActorRef, members: Set[Member]) extends Data
+  private case class RunState(system: ActorSystem, cluster: Cluster, embedded: ActorRef, members: Set[Member]) extends Data
 
   private class RecoveryActor(systemBuilder: () => ActorSystem,
     embeddedBuilder: (ActorSystem) => ActorRef,
@@ -48,7 +81,7 @@ object Recovery {
     when(Running) {
       case Event(RegisterClusterListener(listener), state: RunState) =>
         state.cluster.subscribe(listener, initialStateMode = InitialStateAsEvents,
-        classOf[MemberEvent])
+          classOf[MemberEvent])
         stay
       case Event(MemberRemoved(member, _), state: RunState) =>
         (state.members - member) match {
@@ -82,7 +115,7 @@ object Recovery {
     }
 
     onTermination {
-      case StopEvent(_, _, RunState(system, _, _,_)) => system.shutdown
+      case StopEvent(_, _, RunState(system, _, _, _)) => system.shutdown
     }
 
     initialize

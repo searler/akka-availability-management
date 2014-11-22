@@ -13,12 +13,30 @@ import akka.actor.RootActorPath
 import akka.actor.ActorLogging
 import akka.actor.Props
 
+/**
+ * Provides a simple "embedded actor" implementation for Recovery.
+ */
 object Redirector {
 
+  /**
+   * Registers an actor by its name
+   * 
+   * @param handler Actor that receives messages delivered via the cluster
+   */
   case class Register(handler: ActorRef)
+  
+  /**
+   * Send  message to named handler of node(s) identified by role. 
+   * 
+   * @param role that identifies the cluster node(s)
+   * @param name that identifies the handler
+   * @param msg to be delivered to the handler on the node(s)
+   */
   case class Send(role: String, name: String, msg: Any)
 
   def props() = Props(classOf[RedirectorActor])
+  
+  //--------------------- internal ---------------
 
   private class RedirectorActor() extends Actor {
 
@@ -47,6 +65,17 @@ object Redirector {
     }
 
   }
+  /**
+   * Ship message to remote node
+   * 
+   * @param name of handler
+   * @param msg the message
+   */
   private case class Deliver(name: String, msg: Any)
+  /**
+   * State of actor that needs to be retained across restarts
+   * 
+   * @param registered name->handler map
+   */
   private case class State(registered: Map[String, ActorRef]) extends EmbeddedState
 }

@@ -16,7 +16,6 @@ import Redirector._
 import scala.concurrent.duration._
 import akka.remote.transport.ThrottlerTransportAdapter.Direction
 
-
 object RecoveryMultiNodeConfig extends MultiNodeConfig {
   val controller = role("controller")
   val server1 = role("server1") // 1
@@ -53,8 +52,8 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
   import RecoveryMultiNodeConfig._
 
   def initialParticipants = roles.size
-  
-  var m:ActorRef = _
+
+  var m: ActorRef = _
 
   def start(roles: String, portIndex: Int) = {
     val seedAddress = node(server1).address.toString
@@ -85,19 +84,19 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
     "wait for all nodes to enter a barrier" in {
       enterBarrier("startup")
     }
-    
+
     "deploy" in {
       runOn(controller) {
         enterBarrier("deployed")
       }
       runOn(server1) {
-         start("srv1", 0)
+        start("srv1", 0)
         m ! Register(self)
         enterBarrier("deployed")
       }
 
       runOn(server2) {
-         start("srv2", 1)
+        start("srv2", 1)
         m ! Register(self)
         enterBarrier("deployed")
       }
@@ -109,7 +108,7 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
         List("srv1", "srv2").foreach {
           role => expectMsgPF(4 seconds) { case MemberUp(p) if p.hasRole(`role`) => () }
         }
-         enterBarrier("deployed")
+        enterBarrier("deployed")
       }
     }
 
@@ -129,10 +128,7 @@ class MultiRecoveryTest extends MultiNodeSpec(RecoveryMultiNodeConfig)
 
       enterBarrier("redirected")
     }
-    
-   
-    
-    
+
   }
 
   override def beforeAll() = multiNodeSpecBeforeAll()
